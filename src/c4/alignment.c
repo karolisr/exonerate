@@ -2786,7 +2786,7 @@ static void Alignment_display_gff_line(Alignment *alignment,
             attribute = attribute_list->pdata[i];
             fprintf(fp, "%s", attribute);
             if((i+1) < attribute_list->len)
-                fprintf(fp, " ; ");
+                fprintf(fp, ";");
             }
         }
     fprintf(fp, "\n");
@@ -2814,8 +2814,16 @@ static void Alignment_display_gff_exon(Alignment *alignment,
                                        gint exon_target_gap,
                                        gint exon_query_frameshift,
                                        gint exon_target_frameshift,
-                                       gpointer user_data, FILE *fp){
+                                       gpointer user_data, gint result_id, FILE *fp){
     register GPtrArray *attribute_list = g_ptr_array_new();
+    g_ptr_array_add(attribute_list,
+                    g_strdup_printf("Name=%s__%03d",
+                        report_on_query?target->id:query->id,
+                        result_id));
+    g_ptr_array_add(attribute_list,
+                    g_strdup_printf("ID=%s__%03d",
+                        report_on_query?target->id:query->id,
+                        result_id));
     g_ptr_array_add(attribute_list,
                     g_strdup_printf("insertions %d",
                                     report_on_query?exon_query_gap
@@ -2860,9 +2868,11 @@ static void Alignment_display_gff_utr(Alignment *alignment,
                             gint cds_query_start, gint cds_target_start,
                             gint cds_query_end, gint cds_target_end,
                             gint exon_query_start, gint exon_target_start,
-                            gint query_pos, gint target_pos, FILE *fp){
+                            gint query_pos, gint target_pos, gint result_id,
+                            Translate *translate, gpointer user_data, FILE *fp){
     register gint curr_cds_query_start, curr_cds_target_start,
                   curr_utr_query_start, curr_utr_target_start;
+    register GPtrArray *attribute_list = g_ptr_array_new();
     if(post_cds){
         curr_utr_query_start = MAX(exon_query_start, cds_query_end);
         curr_utr_target_start = MAX(exon_target_start, cds_target_end);
@@ -2882,11 +2892,25 @@ static void Alignment_display_gff_utr(Alignment *alignment,
                                    exon_query_start);
         curr_cds_target_start = MAX(cds_target_start,
                                     exon_target_start);
+        attribute_list = g_ptr_array_new();
+        g_ptr_array_add(attribute_list,
+                        g_strdup_printf("Name=%s__%03d",
+                            report_on_query?target->id:query->id,
+                            result_id));
+        g_ptr_array_add(attribute_list,
+                        g_strdup_printf("ID=%s__%03d",
+                            report_on_query?target->id:query->id,
+                            result_id));
+        g_ptr_array_add(attribute_list,
+                        g_strdup_printf("similarity %2.2f",
+                            Alignment_get_percent_score(alignment,
+                                query, target, translate, FALSE, user_data)));
         Alignment_display_gff_line(alignment, query, target,
                                report_on_query, "cds",
                                curr_cds_query_start, curr_cds_target_start,
                                query_pos, target_pos,
-                               FALSE, 0, FALSE, 0, NULL, fp);
+                               FALSE, 0, FALSE, 0, attribute_list, fp);
+        Alignment_free_attribute_list(attribute_list);
         }
     return;
     }
@@ -2911,6 +2935,7 @@ static void Alignment_display_gff_gene(Alignment *alignment,
     register GPtrArray *attribute_list = g_ptr_array_new();
     register gint curr_utr_query_start, curr_utr_target_start;
     /**/
+
     g_ptr_array_add(attribute_list,
                     g_strdup_printf("gene_id %d", result_id));
     g_ptr_array_add(attribute_list,
@@ -2930,8 +2955,8 @@ static void Alignment_display_gff_gene(Alignment *alignment,
                                "gene",
                                alignment->region->query_start,
                                alignment->region->target_start,
-                               Region_query_end(alignment->region),
-                               Region_target_end(alignment->region),
+                               Region_query_end(alignment->region) + 3,
+                               Region_target_end(alignment->region) + 3,
                                TRUE, alignment->score,
                                FALSE, 0, attribute_list, fp);
     Alignment_free_attribute_list(attribute_list);
@@ -2942,11 +2967,25 @@ static void Alignment_display_gff_gene(Alignment *alignment,
                 if((ao->transition->advance_query == 1)
                 && (ao->transition->advance_target == 1)){
                     if((cds_query_start != -1) && (!post_cds)){
+                        attribute_list = g_ptr_array_new();
+                        g_ptr_array_add(attribute_list,
+                                        g_strdup_printf("Name=%s__%03d",
+                                            report_on_query?target->id:query->id,
+                                            result_id));
+                        g_ptr_array_add(attribute_list,
+                                        g_strdup_printf("ID=%s__%03d",
+                                            report_on_query?target->id:query->id,
+                                            result_id));
+                        g_ptr_array_add(attribute_list,
+                                        g_strdup_printf("similarity %2.2f",
+                                            Alignment_get_percent_score(alignment,
+                                                query, target, translate, FALSE, user_data)));
                         Alignment_display_gff_line(alignment, query, target,
                                report_on_query, "cds",
                                exon_query_start, exon_target_start,
                                query_pos, target_pos,
-                               FALSE, 0, FALSE, 0, NULL, fp);
+                               FALSE, 0, FALSE, 0, attribute_list, fp);
+                        Alignment_free_attribute_list(attribute_list);
                         post_cds = TRUE;
                         }
                 } else {
@@ -3002,14 +3041,14 @@ static void Alignment_display_gff_gene(Alignment *alignment,
                             cds_query_start, cds_target_start,
                             cds_query_end, cds_target_end,
                             exon_query_start, exon_target_start,
-                            query_pos, target_pos, fp);
+                            query_pos, target_pos, result_id, translate, user_data, fp);
                     Alignment_display_gff_exon(alignment,
                           query, target, translate, report_on_query,
                           query_pos, target_pos,
                           exon_query_start, exon_target_start,
                           exon_query_gap, exon_target_gap,
                           exon_query_frameshift,
-                          exon_target_frameshift, user_data, fp);
+                          exon_target_frameshift, user_data, result_id, fp);
                     in_exon = FALSE;
                     }
                 attribute_list = g_ptr_array_new();
@@ -3043,14 +3082,14 @@ static void Alignment_display_gff_gene(Alignment *alignment,
                             cds_query_start, cds_target_start,
                             cds_query_end, cds_target_end,
                             exon_query_start, exon_target_start,
-                            query_pos, target_pos, fp);
+                            query_pos, target_pos, result_id, translate, user_data, fp);
                     Alignment_display_gff_exon(alignment,
                           query, target, translate, report_on_query,
                           query_pos, target_pos,
                           exon_query_start, exon_target_start,
                           exon_query_gap, exon_target_gap,
                           exon_query_frameshift,
-                          exon_target_frameshift, user_data, fp);
+                          exon_target_frameshift, user_data, result_id, fp);
                     in_exon = FALSE;
                     }
                 if(gene_orientation == '+'){
@@ -3121,19 +3160,33 @@ static void Alignment_display_gff_gene(Alignment *alignment,
                                query_pos, target_pos,
                                FALSE, 0, FALSE, 0, NULL, fp);
             } else {
+                attribute_list = g_ptr_array_new();
+                g_ptr_array_add(attribute_list,
+                                g_strdup_printf("Name=%s__%03d",
+                                    report_on_query?target->id:query->id,
+                                    result_id));
+                g_ptr_array_add(attribute_list,
+                                g_strdup_printf("ID=%s__%03d",
+                                    report_on_query?target->id:query->id,
+                                    result_id));
+                g_ptr_array_add(attribute_list,
+                                g_strdup_printf("similarity %2.2f",
+                                    Alignment_get_percent_score(alignment,
+                                        query, target, translate, FALSE, user_data)));
                 Alignment_display_gff_line(alignment, query, target,
-                               report_on_query, "cds",
-                               exon_query_start, exon_target_start,
-                               query_pos, target_pos,
-                               FALSE, 0, FALSE, 0, NULL, fp);
+                       report_on_query, "cds",
+                       exon_query_start, exon_target_start,
+                       query_pos + 3, target_pos + 3,
+                       FALSE, 0, FALSE, 0, attribute_list, fp);
+                Alignment_free_attribute_list(attribute_list);
                 }
             }
         Alignment_display_gff_exon(alignment,
               query, target, translate, report_on_query,
-              query_pos, target_pos,
+              query_pos + 3, target_pos + 3,
               exon_query_start, exon_target_start,
               exon_query_gap, exon_target_gap,
-              exon_query_frameshift, exon_target_frameshift, user_data, fp);
+              exon_query_frameshift, exon_target_frameshift, user_data, result_id, fp);
         }
     return;
     }
@@ -3196,8 +3249,8 @@ static void Alignment_display_gff_similarity(Alignment *alignment,
                                "similarity",
                                alignment->region->query_start,
                                alignment->region->target_start,
-                               Region_query_end(alignment->region),
-                               Region_target_end(alignment->region),
+                               Region_query_end(alignment->region) + 3,
+                               Region_target_end(alignment->region) + 3,
                                TRUE, alignment->score,
                                FALSE, 0, attribute_list, fp);
     Alignment_free_attribute_list(attribute_list);
